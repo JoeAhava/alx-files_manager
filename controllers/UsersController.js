@@ -1,40 +1,40 @@
+/* eslint-disable import/no-named-as-default */
 import sha1 from 'sha1';
+import Queue from 'bull/lib/queue';
 import dbClient from '../utils/db';
 
+const userQueue = new Queue('email sending');
+
 export default class UsersController {
-  // eslint-disable-next-line consistent-return
   static async postNew(req, res) {
-    const email = req.body.email ? req.body.email : null;
-    let password = req.body.password ? req.body.password : null;
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
 
     if (!email) {
-      return res.status(400).json({ error: 'Missing email' });
+      res.status(400).json({ error: 'Missing email' });
+      return;
     }
     if (!password) {
-      return res.status(400).json({ error: 'Missing password' });
+      res.status(400).json({ error: 'Missing password' });
+      return;
     }
-    const exist = await dbClient.db.collection('users').findOne({ email });
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    if (exist) {
-      return res.status(400).json({ error: 'Already exist' });
+    if (user) {
+      res.status(400).json({ error: 'Already exist' });
+      return;
     }
-    password = sha1(password);
-    const addToDb = await dbClient.db.collection('users').insertOne({ email, password });
-    const id = addToDb.insertedId.toString();
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
-    res.status(201).json({ email, id });
+    userQueue.add({ userId });
+    res.status(201).json({ email, id: userId });
   }
 
   static async getMe(req, res) {
-    const token = req.headers['X-Token'];
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    // Basic Authentication
-    const basic = req.headers.get('Authorization').split(' ')[1];
-    const credentials = Buffer.from(basic, 'base64').toString('ascii');
-    const [_email] = credentials.split(':');
+    const { user } = req;
 
-    return res.status(200).json({ email: _email, id: res._id.toString });
+    res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }

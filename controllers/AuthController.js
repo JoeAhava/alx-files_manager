@@ -1,20 +1,20 @@
-import { v4 } from 'uuid';
+/* eslint-disable import/no-named-as-default */
+import { v4 as uuidv4 } from 'uuid';
 import redisClient from '../utils/redis';
 
 export default class AuthController {
   static async getConnect(req, res) {
-    const token = v4;
-    await redisClient.set(`auth_${token}`, req._id.toString(), 24 * 60 * 60);
-    return res.status(200).json({ token });
+    const { user } = req;
+    const token = uuidv4();
+
+    await redisClient.set(`auth_${token}`, user._id.toString(), 24 * 60 * 60);
+    res.status(200).json({ token });
   }
 
   static async getDisconnect(req, res) {
-    const token = req.headers['X-Token'];
-    if (!token) {
-      return res.status(401).send('Unauthorized');
-    }
+    const token = req.headers['x-token'];
 
     await redisClient.del(`auth_${token}`);
-    return res.status(204);
+    res.status(204).send();
   }
 }
